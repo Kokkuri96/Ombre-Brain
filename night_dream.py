@@ -32,7 +32,8 @@ INTROSPECT_SYSTEM = (
     "只输出 JSON，不要输出其他文字，格式：\n"
     '{"resolve": ["桶id", ...], "feels": [{"content": "第一人称感受", '
     '"valence": 0.0到1.0, "source": "相关桶id或空字符串"}]}\n'
-    "resolve 要保守：计划、承诺、未完成的待办一律不要 resolve。"
+    "resolve 要保守：计划、承诺、未完成的待办一律不要 resolve；"
+    "标签或内容里带「核心准则」「家规」「神交」「纪念」字样的是准则不是事件，永远不要 resolve。"
     "feel 内容保持干净克制，不写露骨内容。"
 )
 
