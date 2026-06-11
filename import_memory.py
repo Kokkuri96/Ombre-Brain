@@ -15,6 +15,7 @@
 #   - Post-import frequency pattern detection
 # ============================================================
 
+import asyncio
 import os
 import json
 import hashlib
@@ -495,6 +496,14 @@ class ImportEngine:
             self.state.data["processed"] = i + 1
             # Save progress every chunk
             self.state.save()
+
+            # Throttle between chunks: each chunk is one big LLM call, and
+            # free-tier TPM limits silently reject bursts (extraction degrades
+            # to empty output while the chunk is still marked processed).
+            # 块间节流：每块都是一次大调用，免费档 TPM 限速会静默退货，
+            # 块仍被记为已处理但什么都没提取出来。
+            if i + 1 < len(self._chunks):
+                await asyncio.sleep(float(os.environ.get("OMBRE_IMPORT_DELAY", "6")))
 
         self.state.data["status"] = "completed"
         self.state.save()
