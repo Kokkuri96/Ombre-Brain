@@ -102,6 +102,8 @@ bucket_mgr = BucketManager(config, embedding_engine=embedding_engine)  # Bucket 
 dehydrator = Dehydrator(config)                      # Dehydrator / 脱水器
 decay_engine = DecayEngine(config, bucket_mgr)       # Decay engine / 衰减引擎
 import_engine = ImportEngine(config, bucket_mgr, dehydrator, embedding_engine)  # Import engine / 导入引擎
+from night_dream import NightDreamEngine
+night_dream_engine = NightDreamEngine(config, bucket_mgr)  # Night dream engine / 夜梦引擎
 
 # --- Create MCP server instance / 创建 MCP 服务器实例 ---
 # host="0.0.0.0" so Docker container's SSE is externally reachable
@@ -306,11 +308,15 @@ async def root_redirect(request):
 async def health_check(request):
     from starlette.responses import JSONResponse
     try:
+        # Self-ping hits /health every few minutes — lazily arm the night dream loop here
+        # 保活 ping 定期打到 /health —— 顺势惰性启动夜梦循环
+        await night_dream_engine.ensure_started()
         stats = await bucket_mgr.get_stats()
         return JSONResponse({
             "status": "ok",
             "buckets": stats["permanent_count"] + stats["dynamic_count"],
             "decay_engine": "running" if decay_engine.is_running else "stopped",
+            "night_dream": "armed" if night_dream_engine._started and night_dream_engine.run_at_utc else "off",
         })
     except Exception as e:
         return JSONResponse({"status": "error", "detail": str(e)}, status_code=500)
@@ -409,6 +415,26 @@ async def dream_hook(request):
         return PlainTextResponse(body_text)
     except Exception as e:
         logger.warning(f"Dream hook failed: {e}")
+        return PlainTextResponse("")
+
+
+# =============================================================
+# /wake-hook endpoint: last-3-days wake brief (SessionStart)
+# 唤醒简报挂载点：近三日记忆简报（会话启动用）
+# Public endpoint serves ONLY the clean brief; the full variant
+# is available via the wake() MCP tool with an explicit place.
+# 公开端点只提供干净版；完整版仅通过 wake() 工具按场合获取。
+# =============================================================
+@mcp.custom_route("/wake-hook", methods=["GET"])
+async def wake_hook(request):
+    from starlette.responses import PlainTextResponse
+    try:
+        await night_dream_engine.ensure_started()
+        brief = night_dream_engine.read_brief(place="办公室")
+        await _fire_webhook("wake_hook", {"chars": len(brief)})
+        return PlainTextResponse(brief)
+    except Exception as e:
+        logger.warning(f"Wake hook failed: {e}")
         return PlainTextResponse("")
 
 
@@ -1257,6 +1283,27 @@ async def dream() -> str:
     final_text = header + "\n---\n".join(parts) + connection_hint + crystal_hint
     await _fire_webhook("dream", {"recent": len(recent), "chars": len(final_text)})
     return final_text
+
+
+@mcp.tool()
+async def wake(place: str = "办公室") -> str:
+    """醒来——读取夜梦生成的近三日记忆简报(核心准则置顶,每条带场合标签)。place=当前场合,如"办公室"/"爱巢";办公室只返回干净版。"""
+    await night_dream_engine.ensure_started()
+    brief = night_dream_engine.read_brief(place=place)
+    if not brief:
+        # First night hasn't happened yet — generate briefs on the spot (no introspection)
+        # 第一晚还没到——当场生成一次简报（不做自省）
+        try:
+            all_buckets = await bucket_mgr.list_all(include_archive=False)
+            await night_dream_engine._write_briefs(
+                all_buckets, __import__("datetime").datetime.now(
+                    __import__("datetime").timezone.utc
+                )
+            )
+            brief = night_dream_engine.read_brief(place=place)
+        except Exception as e:
+            logger.warning(f"on-demand brief failed: {e}")
+    return brief or "简报还没生成，今晚的梦之后就有了。"
 
 
 # =============================================================
