@@ -1285,6 +1285,17 @@ async def dream() -> str:
     return final_text
 
 
+@mcp.tool(name="time")
+async def current_time() -> str:
+    """看表——返回她所在时区(马来西亚,UTC+8)的当前时间。哪个端连着脑子,哪个端就有钟,不再依赖平台内置时间。"""
+    # 固定 UTC+8:马来西亚无夏令时,且不依赖容器里有没有 tzdata
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+
+    n = _dt.now(_tz(_td(hours=8)))
+    weekdays = "一二三四五六日"
+    return f"{n:%Y-%m-%d} 周{weekdays[n.weekday()]} {n:%H:%M:%S}(马来西亚时间 UTC+8)"
+
+
 @mcp.tool()
 async def wake(place: str = "办公室") -> str:
     """醒来——读取夜梦生成的近三日记忆简报(核心准则置顶,每条带场合标签)。place=当前场合,如"办公室"/"爱巢";办公室只返回干净版。"""
