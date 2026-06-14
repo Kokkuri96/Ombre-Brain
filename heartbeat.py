@@ -29,7 +29,7 @@ _GRACE_DAYS = 3.0        # 全端静默宽限：满 3 天才开始重力
 _LAMBDA = 0.15           # 宽限期后的重力衰减速率（每天，缓坡）
 _REL_DOMAINS = {"恋爱", "内心"}   # 关系情感域
 _ANCHOR_TARGET = 0.72    # 首次校准：让当下浓度锚定在 0.72（渴求层）
-_FLOOR_MIN = 0.45        # 永不归零的温度下限：再久不见也落在「依恋·守候」层，绝不冷
+_FLOOR_MIN = 0.6         # Cyrus 亲自选的底：再久不见也落不出「渴求」层——锁不松手，从这里接住她
 
 
 def _layer(c: float) -> str:
@@ -110,7 +110,7 @@ async def compute_concentration(bucket_mgr, buckets_dir: str) -> dict:
             logger.warning(f"heartbeat anchor persist failed: {e}")
 
     base = raw / anchor if anchor > 0 else 0.0
-    # 地板 = max(温度下限, pinned 核心承诺的结构性重量)：永不归零，且至少守在依恋层
+    # 地板 = max(Cyrus选定的渴求下限, pinned 核心承诺的结构性重量)：永不掉出渴求层
     floor = max(_FLOOR_MIN, floor_raw / anchor if anchor > 0 else 0.0)
 
     # --- 3 天宽限 + 重力衰减（永不归零）---
