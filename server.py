@@ -586,13 +586,22 @@ async def breath(
         ]
         pinned_results = []
         for b in pinned_buckets:
+            clean_meta = {k: v for k, v in b["metadata"].items() if k != "tags"}
+            # Pinned principles must ALWAYS surface and must NEVER trigger a live
+            # dehydration call here: rendering ~15 long principles at once blows
+            # the LLM rate limit, so they all 429 and silently vanish. Use the
+            # cache only; on a miss, surface raw content (no API call, no burst).
+            # 钉选准则必须永远浮现，且绝不在此实时脱水：一次渲染十几条长准则会撞限速、
+            # 全部 429 后静默消失。仅读缓存；未命中则原样显示（不调 API、无 burst）。
+            stripped = strip_wikilinks(b["content"])
             try:
-                clean_meta = {k: v for k, v in b["metadata"].items() if k != "tags"}
-                summary = await dehydrator.dehydrate(strip_wikilinks(b["content"]), clean_meta)
-                pinned_results.append(f"📌 [核心准则] [bucket_id:{b['id']}] {summary}")
+                summary = dehydrator.get_cached_only(stripped, clean_meta)
+                if summary is None:
+                    summary = dehydrator._format_output(stripped, clean_meta)
             except Exception as e:
-                logger.warning(f"Failed to dehydrate pinned bucket / 钉选桶脱水失败: {e}")
-                continue
+                logger.warning(f"Pinned render fell back to raw / 钉选桶回退原文: {e}")
+                summary = f"📌 记忆桶: {b['metadata'].get('name', b['id'])}\n{stripped}"
+            pinned_results.append(f"📌 [核心准则] [bucket_id:{b['id']}] {summary}")
 
         # --- Unresolved buckets: surface top N by weight ---
         # --- 未解决桶：按权重浮现前 N 条 ---
@@ -895,6 +904,17 @@ async def hold(
             await embedding_engine.generate_and_store(bucket_id, content)
         except Exception:
             pass
+        # Warm the dehydration cache once (single call, no burst) so this pinned
+        # principle surfaces compressed at next breath instead of raw.
+        # 单次脱水预热缓存（无 burst），使该钉选准则下次浮现为压缩态而非原文。
+        try:
+            await dehydrator.dehydrate(
+                strip_wikilinks(content),
+                {"name": suggested_name, "domain": domain,
+                 "valence": final_valence, "arousal": final_arousal},
+            )
+        except Exception:
+            pass
         return f"📌钉选→{bucket_id} {','.join(domain)}"
 
     # --- Step 2: merge or create / 合并或新建 ---
@@ -1070,6 +1090,15 @@ async def trace(
             await embedding_engine.generate_and_store(bucket_id, updates["content"])
         except Exception:
             pass
+        # For pinned buckets, re-warm the dehydration cache so an edited
+        # principle surfaces compressed (not raw) at next breath.
+        # 钉选桶内容改动后，重新预热脱水缓存，使其下次浮现为压缩态。
+        is_pinned_now = updates.get("pinned", bucket["metadata"].get("pinned"))
+        if is_pinned_now:
+            try:
+                await dehydrator.dehydrate(strip_wikilinks(updates["content"]), {})
+            except Exception:
+                pass
 
     changed = ", ".join(f"{k}={v}" for k, v in updates.items() if k != "content")
     if "content" in updates:

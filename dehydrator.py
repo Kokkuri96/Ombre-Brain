@@ -275,6 +275,29 @@ class Dehydrator:
         return self._format_output(result, metadata)
 
     # ---------------------------------------------------------
+    # Cache-only render: NEVER calls the API
+    # 仅缓存渲染：绝不调用 API
+    # Used for pinned principles so surfacing never triggers a live
+    # dehydration burst (which would blow the LLM rate limit and drop them).
+    # 用于钉选准则的浮现，避免实时脱水 burst 撞限速导致准则丢失。
+    # ---------------------------------------------------------
+    def get_cached_only(self, content: str, metadata: dict = None) -> str | None:
+        """
+        Return a renderable summary WITHOUT any API call.
+        - empty / short content → formatted raw
+        - cache hit → formatted cached summary
+        - cache miss → None (caller decides the fallback, e.g. raw content)
+        """
+        if not content or not content.strip():
+            return self._format_output(content, metadata)
+        if count_tokens_approx(content) < 100:
+            return self._format_output(content, metadata)
+        cached = self._get_cached_summary(content)
+        if cached:
+            return self._format_output(cached, metadata)
+        return None
+
+    # ---------------------------------------------------------
     # Merge: blend new content into existing bucket
     # 合并：将新内容揉入已有桶，保持体积恒定
     # ---------------------------------------------------------
