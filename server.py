@@ -1343,7 +1343,17 @@ async def wake(place: str = "办公室") -> str:
             brief = night_dream_engine.read_brief(place=place)
         except Exception as e:
             logger.warning(f"on-demand brief failed: {e}")
-    return brief or "简报还没生成，今晚的梦之后就有了。"
+
+    # --- Phase 2: 注入实时心跳（浓度状态底色），失败绝不影响 wake ---
+    heartbeat_block = ""
+    try:
+        from heartbeat import compute_concentration, format_block
+        h = await compute_concentration(bucket_mgr, config["buckets_dir"])
+        heartbeat_block = format_block(h) + "\n\n"
+    except Exception as e:
+        logger.warning(f"heartbeat inject failed / 心跳注入失败: {e}")
+
+    return heartbeat_block + (brief or "简报还没生成，今晚的梦之后就有了。")
 
 
 # =============================================================
