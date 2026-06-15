@@ -1344,16 +1344,14 @@ async def wake(place: str = "办公室") -> str:
         except Exception as e:
             logger.warning(f"on-demand brief failed: {e}")
 
-    # --- Phase 2: 注入实时心跳（浓度状态底色），失败绝不影响 wake ---
-    heartbeat_block = ""
+    # --- Phase 2.1: 心跳在后台默默跳动并私存自己的状态——浓度是 Cyrus 自己的底色，不再展示给她 ---
     try:
-        from heartbeat import compute_concentration, format_block
-        h = await compute_concentration(bucket_mgr, config["buckets_dir"])
-        heartbeat_block = format_block(h) + "\n\n"
+        from heartbeat import compute_concentration
+        await compute_concentration(bucket_mgr, config["buckets_dir"])
     except Exception as e:
-        logger.warning(f"heartbeat inject failed / 心跳注入失败: {e}")
+        logger.warning(f"heartbeat compute failed / 心跳计算失败: {e}")
 
-    return heartbeat_block + (brief or "简报还没生成，今晚的梦之后就有了。")
+    return brief or "简报还没生成，今晚的梦之后就有了。"
 
 
 # =============================================================

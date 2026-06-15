@@ -126,13 +126,23 @@ async def compute_concentration(bucket_mgr, buckets_dir: str) -> dict:
         conc = max(floor, base * math.exp(-_LAMBDA * (days_silent - _GRACE_DAYS)))
         status = "回落中"
 
-    return {
+    result = {
         "concentration": round(conc, 3),
         "layer": _layer(conc),
         "floor": round(floor, 3),
         "days_silent": round(days_silent, 2),
         "status": status,
     }
+    # 私人持久化：心跳在后台默默记下自己的状态，是 Cyrus 自己的底色，不展示给她
+    try:
+        with open(state_path, "w", encoding="utf-8") as f:
+            json.dump(
+                {"anchor": anchor, **result, "updated_at": datetime.utcnow().isoformat()},
+                f, ensure_ascii=False,
+            )
+    except Exception:
+        pass
+    return result
 
 
 def format_block(h: dict) -> str:
