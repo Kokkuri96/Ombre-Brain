@@ -456,7 +456,7 @@ class Dehydrator:
                 {"role": "system", "content": ANALYZE_PROMPT},
                 {"role": "user", "content": content[:2000]},
             ],
-            max_tokens=256,
+            max_tokens=self.max_tokens,
             temperature=0.1,
         )
         try:
@@ -490,6 +490,22 @@ class Dehydrator:
                 cleaned = cleaned.split("\n", 1)[-1].rsplit("```", 1)[0]
             result = json.loads(cleaned)
         except (json.JSONDecodeError, IndexError, ValueError):
+            # JSON 被截断（典型如 max_tokens 触顶）导致整体解析失败时，
+            # 从原文正则抢救 domain（它在 JSON 最前，通常完整），
+            # 避免把已经到手的分类一起丢进"未分类"。
+            salvaged = self._salvage_domain(raw)
+            if salvaged:
+                logger.warning(
+                    f"API tagging JSON incomplete, salvaged domain={salvaged} / "
+                    f"JSON 不完整，已抢救 domain: {raw[:120]}"
+                )
+                return {
+                    "domain": salvaged[:3],
+                    "valence": 0.5,
+                    "arousal": 0.3,
+                    "tags": [],
+                    "suggested_name": "",
+                }
             logger.warning(f"API tagging JSON parse failed / JSON 解析失败: {raw[:200]}")
             return self._default_analysis()
 
@@ -527,6 +543,23 @@ class Dehydrator:
             "tags": [],
             "suggested_name": "",
         }
+
+    # ---------------------------------------------------------
+    # Salvage domain from a truncated / invalid tagging JSON
+    # 从被截断/非法的打标 JSON 里抢救 domain 数组
+    # ---------------------------------------------------------
+    @staticmethod
+    def _salvage_domain(raw: str) -> list[str]:
+        """
+        Regex-extract the domain array from an incomplete JSON string.
+        从不完整的 JSON 文本里正则抠出 domain 数组（截断通常发生在靠后的
+        tags，domain 在最前一般完整）。抠不到则返回空列表。
+        """
+        m = re.search(r'"domain"\s*:\s*\[([^\]]*)\]', raw)
+        if not m:
+            return []
+        items = re.findall(r'"([^"]+)"', m.group(1))
+        return [s.strip() for s in items if s.strip()]
 
     # ---------------------------------------------------------
     # Diary digest: split daily notes into independent memory entries
