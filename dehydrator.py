@@ -449,7 +449,8 @@ class Dehydrator:
         Call LLM API for content analysis / tagging.
         调用 LLM API 执行内容分析打标。
         """
-        response = await self.client.chat.completions.create(
+        # 强制纯 JSON 输出（DeepSeek / Gemini 兼容端点均支持）；不支持的端点自动回退
+        base_kwargs = dict(
             model=self.model,
             messages=[
                 {"role": "system", "content": ANALYZE_PROMPT},
@@ -458,6 +459,12 @@ class Dehydrator:
             max_tokens=256,
             temperature=0.1,
         )
+        try:
+            response = await self.client.chat.completions.create(
+                **base_kwargs, response_format={"type": "json_object"}
+            )
+        except Exception:
+            response = await self.client.chat.completions.create(**base_kwargs)
         if not response.choices:
             return self._default_analysis()
         raw = response.choices[0].message.content or ""
