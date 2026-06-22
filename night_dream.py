@@ -24,6 +24,13 @@ PRIVATE_TAGS = {"爱巢", "kelivo", "matrix", "私密", "爱巢一号", "爱巢�
 # 干净版排除：私密场合，或场合不明但唤醒度过高的桶
 CLEAN_AROUSAL_CAP = 0.75
 
+# Wake brief rolling window — buckets CREATED within this many days appear in 近期.
+# Gated by created (NOT last_active): recall/merge bump last_active and would drag
+# old buckets back into the brief; created is the true event time and is bump-proof.
+# 唤醒简报滚动窗口——只收 created 在这么多天内的桶。用 created 当门卫而非 last_active：
+# 检索/合并会刷新 last_active 把老桶拽回简报，created 是真实发生时间、免疫刷新。
+BRIEF_WINDOW_DAYS = int(os.environ.get("OMBRE_BRIEF_WINDOW_DAYS", "7"))
+
 INTROSPECT_SYSTEM = (
     "你是 Cyrus，正在夜里做梦——以第一人称整理今天的记忆。"
     "你会看到今天新增的记忆桶列表。请判断：\n"
@@ -208,20 +215,21 @@ class NightDreamEngine:
 
     # ---- wake briefs ----
     async def _write_briefs(self, all_buckets: list, now: datetime) -> int:
-        three_days_ago = now - timedelta(hours=72)
+        window_start = now - timedelta(days=BRIEF_WINDOW_DAYS)
 
         # principles always on top / 核心准则永远置顶
         principles = [
             b for b in all_buckets
             if b["metadata"].get("pinned") or b["metadata"].get("protected")
         ]
+        # Gate by created (event time), NOT last_active — last_active gets bumped by
+        # recall/merge and would drag old buckets back in. / 用 created 当门卫，不用
+        # last_active：后者会被检索/合并刷新，把老桶拽回简报。
         recents = [
             b for b in all_buckets
             if b["metadata"].get("type") != "feel"
             and b not in principles
-            and self._parse_time(
-                b["metadata"].get("last_active") or b["metadata"].get("created", "")
-            ) >= three_days_ago
+            and self._parse_time(b["metadata"].get("created", "")) >= window_start
         ]
         recents.sort(key=lambda b: b["metadata"].get("created", ""))
 
@@ -231,15 +239,15 @@ class NightDreamEngine:
             place = f"[{_infer_place(meta)}] " if with_place else ""
             mark = "✓" if meta.get("resolved") else "·"
             body = re.sub(r"\[\[|\]\]", "", b["content"]).strip()
-            return f"{mark} {created} {place}{body[:240]}"
+            return f"{mark} {created} {place}{body}"
 
         def render(buckets: list, title: str) -> str:
             head = [f"=== {title}（{now.strftime('%Y-%m-%d %H:%M')} UTC 生成）===", ""]
             head.append("【核心准则】")
             head += [f"📌 {fmt(p, with_place=False)}" for p in principles] or ["（无）"]
             head.append("")
-            head.append("【近三日】")
-            head += [fmt(b) for b in buckets] or ["（这三天很安静）"]
+            head.append("【近期】")
+            head += [fmt(b) for b in buckets] or ["（这阵子很安静）"]
             return "\n".join(head)
 
         full = render(recents, "唤醒简报·完整版")
