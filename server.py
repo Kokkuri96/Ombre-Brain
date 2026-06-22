@@ -728,9 +728,9 @@ async def breath(
         logger.error(f"Search failed / 检索失败: {e}")
         return "检索过程出错，请稍后重试。"
 
-    # --- Exclude pinned/protected from search results (they surface in surfacing mode) ---
-    # --- 搜索模式排除钉选桶（它们在浮现模式中始终可见）---
-    matches = [b for b in matches if not (b["metadata"].get("pinned") or b["metadata"].get("protected"))]
+    # --- Exclude pinned/protected (surface in surfacing mode) AND digested (沉底/隐藏，搜索也不冒出来) ---
+    # --- 搜索模式排除钉选桶（浮现模式始终可见）与 digested 桶（已消化=保留但不浮现/不被检索）---
+    matches = [b for b in matches if not (b["metadata"].get("pinned") or b["metadata"].get("protected") or b["metadata"].get("digested"))]
 
     # --- Vector similarity channel: find semantically related buckets ---
     # --- 向量相似度通道：找到语义相关的桶 ---
@@ -740,7 +740,7 @@ async def breath(
         for bucket_id, sim_score in vector_results:
             if bucket_id not in matched_ids and sim_score > 0.5:
                 bucket = await bucket_mgr.get(bucket_id)
-                if bucket and not (bucket["metadata"].get("pinned") or bucket["metadata"].get("protected")):
+                if bucket and not (bucket["metadata"].get("pinned") or bucket["metadata"].get("protected") or bucket["metadata"].get("digested")):
                     bucket["score"] = round(sim_score * 100, 2)
                     bucket["vector_match"] = True
                     matches.append(bucket)
