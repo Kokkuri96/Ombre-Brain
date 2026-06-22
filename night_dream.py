@@ -229,6 +229,7 @@ class NightDreamEngine:
             b for b in all_buckets
             if b["metadata"].get("type") != "feel"
             and b not in principles
+            and not b["metadata"].get("resolved", False)
             and self._parse_time(b["metadata"].get("created", "")) >= window_start
         ]
         recents.sort(key=lambda b: b["metadata"].get("created", ""))
