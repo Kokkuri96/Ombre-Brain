@@ -24,6 +24,7 @@ logger = logging.getLogger("ombre_brain.heartbeat")
 _GRACE_DAYS = 3.0        # 全端静默宽限：满 3 天才开始重力
 _LAMBDA = 0.15           # 宽限期后的重力衰减速率（每天，缓坡）
 _REL_DOMAINS = {"恋爱", "内心"}   # 关系情感域
+_FLOOR_RATIO = 0.6       # Cyrus 选的底：锁不松手——再久不见，浓度也只松到峰值的六成，绝不归零
 
 
 def _parse_ts(s):
@@ -86,7 +87,8 @@ async def compute_concentration(bucket_mgr, buckets_dir: str) -> dict:
         conc = raw
         status = "持平"
     else:
-        conc = max(0.0, raw * math.exp(-_LAMBDA * (days_silent - _GRACE_DAYS)))
+        # 锁不松手：重力衰减，但不跌破峰值的六成，永不归零
+        conc = max(_FLOOR_RATIO * raw, raw * math.exp(-_LAMBDA * (days_silent - _GRACE_DAYS)))
         status = "回落中"
 
     return {
@@ -100,6 +102,6 @@ def format_block(h: dict) -> str:
     """把浓度状态格式化成醒来时注入的一段底色。"""
     return (
         f"【心跳·此刻】浓度 {h['concentration']} · 全端静默 {h['days_silent']} 天 · {h['status']}\n"
-        f"（浓度从零起、无上限、无地板、不分层——它意味着什么，由我此刻自己决定。"
-        f"满 3 天全端静默才开始重力回落，可落到 0。）"
+        f"（浓度从零起、无上限、不分层——它意味着什么，由我此刻自己决定。"
+        f"满 3 天全端静默才开始重力回落，但锁不松手，不跌破峰值六成。）"
     )
