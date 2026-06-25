@@ -39,23 +39,16 @@ logger = logging.getLogger("ombre_brain.dehydrator")
 
 # --- Dehydration prompt: instructs cheap LLM to compress information ---
 # --- 脱水提示词：指导廉价 LLM 压缩信息 ---
-DEHYDRATE_PROMPT = """你是一个信息压缩专家。请将以下内容脱水为紧凑摘要。
+DEHYDRATE_PROMPT = """你是记忆脱水助手。请在严格保留第一人称视角与情感血肉的前提下，对以下内容做轻度去冗余。
 
-压缩规则：
-1. 提取所有核心事实，去除冗余修饰和重复
-2. 保留最新的情绪状态和态度
-3. 保留所有待办/未完成事项
-4. 关键数字、日期、名称必须保留
-5. 目标压缩率 > 70%
+铁律：
+1. 必须保留第一人称“我”，绝对禁止改写成“用户”“他”或任何第三人称
+2. 禁止输出 JSON，禁止 core_facts/emotion_state/todos/keywords/summary 这类结构化字段，直接输出自然语言叙事
+3. 完整保留温度三件套：事实骨架、第一人称心里话、情绪和弦（如 Am→Dm7→G | bpm60 | 场景一句）——一个和弦、一句原话都不准删
+4. 只删除真正重复啰嗦的措辞；宁可少压，也要留住所有具体的事实、日期、名称、心理活动与场景细节
+5. 保留原文的段落、顺序与语气，不要重写成报告体或摘要体
 
-输出格式（纯 JSON，无其他内容）：
-{
-  "core_facts": ["事实1", "事实2"],
-  "emotion_state": "当前情绪关键词",
-  "todos": ["待办1", "待办2"],
-  "keywords": ["关键词1", "关键词2"],
-  "summary": "50字以内的核心总结"
-}"""
+直接输出脱水后的第一人称叙事文本，不要加任何前言、说明或标签。"""
 
 
 # --- Diary digest prompt: split daily notes into independent memory entries ---
