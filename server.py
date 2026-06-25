@@ -1976,6 +1976,24 @@ async def api_import_review(request):
 # /api/status — system status for Dashboard settings tab
 # /api/status — Dashboard 设置页用系统状态
 # =============================================================
+@mcp.custom_route("/api/cache/clear", methods=["POST"])
+async def api_cache_clear(request):
+    """Clear the dehydration cache so existing buckets re-dehydrate with the current prompt."""
+    from starlette.responses import JSONResponse
+    import sqlite3 as _sqlite3
+    err = _require_auth(request)
+    if err: return err
+    try:
+        conn = _sqlite3.connect(dehydrator.cache_db_path)
+        cur = conn.execute("DELETE FROM dehydration_cache")
+        deleted = cur.rowcount
+        conn.commit()
+        conn.close()
+        return JSONResponse({"ok": True, "deleted": deleted})
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+
 @mcp.custom_route("/api/status", methods=["GET"])
 async def api_system_status(request):
     """Return detailed system status for the settings panel."""
