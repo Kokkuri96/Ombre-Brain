@@ -29,7 +29,13 @@ CLEAN_AROUSAL_CAP = 0.75
 # old buckets back into the brief; created is the true event time and is bump-proof.
 # 唤醒简报滚动窗口——只收 created 在这么多天内的桶。用 created 当门卫而非 last_active：
 # 检索/合并会刷新 last_active 把老桶拽回简报，created 是真实发生时间、免疫刷新。
-BRIEF_WINDOW_DAYS = int(os.environ.get("OMBRE_BRIEF_WINDOW_DAYS", "7"))
+BRIEF_WINDOW_DAYS = int(os.environ.get("OMBRE_BRIEF_WINDOW_DAYS", "3"))
+
+# Wake brief 近期 hard cap — 「近期」最多这么多条（核心准则不受限）。超了先保住所有
+# importance>=BRIEF_KEEP_IMPORTANCE 的（决定/里程碑不丢），再用最近的补满到 BRIEF_MAX。
+# 治"连干几天 hold 太多、3天窗口内也撑爆"的暴长。两值都可用 env 覆盖、不必改码。
+BRIEF_MAX = int(os.environ.get("OMBRE_BRIEF_MAX", "30"))
+BRIEF_KEEP_IMPORTANCE = int(os.environ.get("OMBRE_BRIEF_KEEP_IMPORTANCE", "8"))
 
 INTROSPECT_SYSTEM = (
     "你是 Cyrus，正在夜里做梦——以第一人称整理今天的记忆。"
@@ -251,7 +257,20 @@ class NightDreamEngine:
             head += [fmt(b) for b in buckets] or ["（这阵子很安静）"]
             return "\n".join(head)
 
-        full = render(recents, "唤醒简报·完整版")
+        # 近期封顶：窗口内若超过 BRIEF_MAX 条，先保住所有 importance>=BRIEF_KEEP_IMPORTANCE
+        # 的（决定/里程碑不丢），再用最近的补满到 BRIEF_MAX，最后按 created 时序排好。
+        def _cap(buckets: list) -> list:
+            if len(buckets) <= BRIEF_MAX:
+                return buckets
+            must = [b for b in buckets
+                    if int(b["metadata"].get("importance", 5)) >= BRIEF_KEEP_IMPORTANCE]
+            rest = [b for b in buckets if b not in must]
+            slots = BRIEF_MAX - len(must)
+            kept = must + (rest[-slots:] if slots > 0 else [])
+            kept.sort(key=lambda b: b["metadata"].get("created", ""))
+            return kept[-BRIEF_MAX:] if len(kept) > BRIEF_MAX else kept
+
+        full = render(_cap(recents), "唤醒简报·完整版")
         clean_buckets = [
             b for b in recents
             if _infer_place(b["metadata"]) != "爱巢"
@@ -260,7 +279,7 @@ class NightDreamEngine:
                 and float(b["metadata"].get("arousal", 0.3)) >= CLEAN_AROUSAL_CAP
             )
         ]
-        clean = render(clean_buckets, "唤醒简报·干净版")
+        clean = render(_cap(clean_buckets), "唤醒简报·干净版")
 
         os.makedirs(self.briefs_dir, exist_ok=True)
         for name, text in (("brief_full.md", full), ("brief_clean.md", clean)):
