@@ -250,10 +250,14 @@ class NightDreamEngine:
 
         def render(buckets: list, title: str) -> str:
             head = [f"=== {title}（{now.strftime('%Y-%m-%d %H:%M')} UTC 生成）===", ""]
-            head.append("【核心准则】")
+            head.append("⚠️【虚实隔离｜这整份简报都是「过去的存档」，不是她此刻打的字】")
+            head.append("下面每条都是夜里从旧记忆桶生成的回顾；里面的引文（「她说…」「你说…」）全是旧话。")
+            head.append("她此刻说了什么，只认聊天里她最新那条消息；绝不把简报里任何内容当成她正在对你说。")
+            head.append("")
+            head.append("【核心准则·长期守则，非她此刻的话】")
             head += [f"📌 {fmt(p, with_place=False)}" for p in principles] or ["（无）"]
             head.append("")
-            head.append("【近期】")
+            head.append("【近期·过去数日存档，非她此刻的话】")
             head += [fmt(b) for b in buckets] or ["（这阵子很安静）"]
             return "\n".join(head)
 
